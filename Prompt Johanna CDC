@@ -1,0 +1,330 @@
+Prompt: En tant que expert en interopérabilité et en chefferie de projet, donne moi les points manquants de ce cahier de charge pour le rendre plus complet pour une equipe tiers
+
+J'ai lu le PDF (photo du sujet) et le document texte (ton CDC). Bon travail globalement — la structure est solide, les ressources FHIR sont bien choisies et la logique de mapping tient la route. Voici mon avis détaillé en tant qu'expert interopérabilité, avec ce qui est bon, ce qui doit être corrigé, et ce qu'il faut vérifier avant de balancer ça à l'IA de dev.
+Ce qui est solide
+FHIR R4 + Location + physicalType bd : correct, c'est bien le code "Bed" du CodeSystem location-physical-type.
+operationalStatus sur v2-0116 : bon choix, c'est exactement la terminologie utilisée pour le statut opérationnel d'un lit (segments PV1/DLD en v2). Les 6 codes que tu listes (C, H, O, U, K, I) couvrent la totalité de cette table — rien ne manque.
+ConceptMap local versionné + equivalence "equivalent" : bonne pratique FHIR, propre.
+Distinction status (administratif) vs operationalStatus (métier) : c'est LE point clé d'interopérabilité sémantique ici, et tu l'as bien isolé (T08, T12 le testent explicitement).
+Protection anti-injection CSV (préfixe apostrophe sur =, +, -, @) : détail de sécu que peu d'étudiants pensent à mettre, bien vu.
+Gestion des états absents/inconnus comme catégorie explicite plutôt que suppression silencieuse : bonne rigueur de qualité de données.
+À corriger avant remise
+1. Nettoyer le début du document. Les lignes "CONCEPTION: Indicateur de Gestion de Lits… Utilisateur: secrétaire… FHIR v?" sont un brouillon resté collé au-dessus du vrai CDC, et il contredit la version finale (utilisateur = "secrétaire" en haut vs "Responsable de service" plus bas). Supprime ce bloc, ne garde que la version consolidée.
+2. Incohérence de genre en section 4 (scénario principal). Ça alterne "elle" et "il" pour le même utilisateur ("Elle vérifie… Elle affiche… L'utilisateur recherche… Il sélectionne…"). Trace typique d'un texte généré sans relecture — à uniformiser (choisis "il" ou "elle" et garde-le, ou passe en écriture neutre "l'utilisateur").
+3. Vérifier la référence "publiée dans HL7 Terminology 4.0.0". J'ai vérifié : le CodeSystem v2-0116 en version 2.2.0 existe bel et bien et est correct pour du FHIR R4 (on le retrouve dans les releases THO 2.x à 6.x). En revanche je n'ai pas trouvé trace d'une release THO "4.0.0" précisément associée à cette version — ce couplage sent l'invention de l'IA. À vérifier toi-même sur https://terminology.hl7.org (Directory of published versions) avant de le citer comme une source, sinon retire juste la référence à "4.0.0" et garde "version 2.2.0 du CodeSystem" (qui, elle, est solide). Petit bonus pour ta soutenance : la version courante de ce CodeSystem est passée à 3.0.0 dans les releases FHIR R5 — mentionner que tu fixes volontairement la 2.2.0 (compatible R4) montre que tu maîtrises le sujet plutôt que de l'avoir subi.
+4. La règle "version absente → avertissement, version différente → INCONNU" (§8.4) est stricte. C'est défendable comme choix de rigueur, mais assure-toi qu'en Phase 2, si HAPI ne renvoie pas de version sur les codings (ce qui est fréquent avec des ressources créées à la main), ton jeu de démo ne bascule pas tout en "INCONNU" par accident. Teste ce cas explicitement avant la recette.
+Améliorations mineures (pas bloquantes)
+Justifie en une phrase pourquoi aucun IG (Implementation Guide) formel n'existe pour la gestion de lits en FHIR pur — tu le dis déjà implicitement (§6.4) mais une phrase explicite type "il n'existe pas d'IG balloté HL7 dédié au bed management, d'où l'usage de la ressource de base + contraintes locales" renforcerait ta justification de choix de specs (c'est un critère noté).
+urn:bedview:codesystem:etat-lit en URN plutôt qu'en URL — acceptable pour un vocabulaire local de projet étudiant, mais dans un vrai projet on préfère une URL stable (https://...) pour la résolvabilité.
+Dans l'ensemble, ton CdC est déjà transmissible à l'IA de dev pour la Phase 2 — les corrections ci-dessus sont surtout de la relecture et une vérif de source, pas une refonte.
+
+
+Prompt: Tu es un spécialiste FHIR R4. Pour la ressource Location utilisée dans BedView, liste : (1) les éléments obligatoires, requis et optionnels selon FHIR R4, (2) les contraintes locales proposées (mode=instance, physicalType.coding=bd, meta.tag), (3) les invariants à vérifier côté client (exclure kind, gérer status absent, operationalStatus manquant). Propose une checklist de validation JSON avant affichage. 
+
+# BEDVIEW — Prompts de conception — Johanna
+
+**Projet :** Indicateur de gestion des lits hospitaliers  
+**Technologies / standards :** FHIR R4, HAPI FHIR, CSV  
+**Serveur FHIR :** `https://hapi.fhir.org/baseR4`
+
+## Rôle de Johanna
+
+Johanna prend en charge l’**interface**, les **quatre écrans**, le **contrat CSV**, la **sécurité de l’export**, la **gestion des erreurs**, le **journal des échanges** et la **recette fonctionnelle**.
+
+---
+
+## Prompt J1 — Conception des écrans et parcours utilisateur
+
+### Prompt
+
+Conçois l’interface BedView à partir du cahier des charges.
+
+L’application doit comporter quatre onglets :
+
+1. Tableau de bord
+2. Ressources FHIR
+3. Conversion CSV
+4. Correspondances
+
+Pour chaque onglet, définis :
+
+- les informations affichées ;
+- les actions possibles ;
+- les états vides ;
+- les avertissements ;
+- les erreurs possibles ;
+- les informations de provenance des données.
+
+Contraintes obligatoires :
+
+- nom du projet et périmètre ;
+- bouton `Actualiser` ;
+- heure de récupération ;
+- compteurs par état ;
+- recherche par nom ou identifiant ;
+- filtre par état ;
+- tableau des lits ;
+- avertissements qualité ;
+- sélection d’un lit ;
+- affichage du JSON exact reçu ;
+- lien vers la ressource HAPI ;
+- journal des échanges ;
+- aperçu du CSV ;
+- téléchargement du CSV ;
+- six correspondances ;
+- détail du mapping de chaque lit ;
+- ConceptMap local consultable ;
+- les couleurs doivent toujours être accompagnées de libellés textuels ;
+- le JSON doit être affiché comme texte et ne jamais être exécuté comme HTML.
+
+### Résultat attendu selon le cahier des charges
+
+- Tableau de bord : compteurs, recherche, filtre, tableau, actualisation, qualité.
+- Ressources FHIR : JSON exact, lien HAPI, journal.
+- Conversion CSV : filtre, nombre de lignes, aperçu et téléchargement.
+- Correspondances : systèmes, version, mapping et ConceptMap.
+
+---
+
+## Prompt J2 — Contrat CSV BedView 1.0.0
+
+### Prompt
+
+Définis précisément le contrat CSV de BedView.
+
+Version du contrat :
+
+`1.0.0`
+
+Nom du fichier :
+
+`bedview-lits-AAAAMMJJ-HHMMSS.csv`
+
+Format :
+
+- UTF-8 ;
+- séparateur virgule ;
+- fin de ligne CRLF ;
+- en-tête obligatoire ;
+- une ligne par lit visible ;
+- valeur absente = cellule vide ;
+- cible non déterminée = `INCONNU`.
+
+Colonnes obligatoires et dans cet ordre :
+
+1. `id_lit`
+2. `nom_lit`
+3. `statut_administratif`
+4. `systeme_source`
+5. `version_source`
+6. `code_source`
+7. `systeme_cible`
+8. `code_cible`
+9. `libelle_cible`
+10. `resultat_mapping`
+11. `avertissements`
+12. `version_mapping`
+13. `derniere_modification`
+14. `date_recuperation`
+15. `url_source`
+
+Pour chaque colonne, précise l’origine de la donnée et la valeur utilisée si elle manque.
+
+Le CSV doit utiliser exactement les lignes correspondant au filtre courant.
+
+### Résultat attendu selon le cahier des charges
+
+- 15 colonnes, dans l’ordre.
+- `nom_lit` utilise l’identifiant si le nom manque.
+- `version_source` reste vide si absente.
+- `version_mapping = 1.0.0`.
+- `date_recuperation` correspond au début du chargement.
+- `url_source` pointe vers la ressource HAPI.
+- L’export correspond au filtre appliqué.
+
+---
+
+## Prompt J3 — Sérialisation CSV, sécurité et pertes d’information
+
+### Prompt
+
+Complète la spécification CSV de BedView avec les règles de sérialisation et de sécurité.
+
+Règles :
+
+- une valeur contenant une virgule, un guillemet ou un retour à la ligne doit être entourée de guillemets ;
+- un guillemet présent dans une valeur doit être doublé ;
+- les cellules commençant par `=`, `+`, `-` ou `@` doivent être neutralisées pour éviter leur interprétation comme formule dans un tableur ;
+- utiliser une apostrophe comme protection ;
+- cette transformation doit être signalée ;
+- le JSON FHIR source ne doit jamais être modifié.
+
+Explique aussi les pertes d’information dues au passage de FHIR vers CSV.
+
+Précise ce qu’il ne faut pas déduire :
+
+- de `date_recuperation` ;
+- de `meta.lastUpdated`.
+
+### Résultat attendu selon le cahier des charges
+
+- CSV correctement échappé.
+- Protection contre les formules de tableur.
+- JSON source inchangé.
+- Le CSV ne conserve pas toutes les extensions ni la structure hiérarchique FHIR.
+- `date_recuperation` n’est pas une date d’observation clinique.
+- `meta.lastUpdated` n’est pas nécessairement la date d’un changement d’occupation.
+
+---
+
+## Prompt J4 — Gestion des erreurs
+
+### Prompt
+
+Conçois la stratégie de gestion des erreurs BedView.
+
+Cas à traiter :
+
+- réseau indisponible ;
+- timeout après 15 secondes ;
+- HTTP 4xx ;
+- HTTP 5xx ;
+- `OperationOutcome` ;
+- JSON invalide ;
+- type de réponse inattendu ;
+- aucun lit trouvé ;
+- champ facultatif absent ;
+- code non reconnu ;
+- échec d’une page de résultats ;
+- échec d’actualisation après un chargement précédemment réussi ;
+- échec de création des données de test.
+
+Pour chaque cas, précise :
+
+- message utilisateur ;
+- données éventuellement conservées ;
+- état complet ou partiel ;
+- possibilité ou non d’exporter ;
+- ajout dans le journal.
+
+Règle impérative :
+
+Une erreur de connexion ne doit jamais être masquée par un remplacement silencieux par des données fictives locales.
+
+### Résultat attendu selon le cahier des charges
+
+- Réseau/timeout → message explicite + possibilité de réessayer.
+- HTTP 4xx/5xx → afficher le statut et le diagnostic `OperationOutcome` s’il existe.
+- JSON invalide → arrêt du chargement.
+- Aucun lit → état vide explicite.
+- Champ facultatif absent → ligne conservée avec avertissement.
+- Échec d’une page → données partielles + export bloqué.
+- Échec après succès → anciennes données visibles comme non actualisées, export bloqué.
+- Création fictive refusée → ne pas simuler une réussite.
+
+---
+
+## Prompt J5 — Journal des échanges et traçabilité
+
+### Prompt
+
+Définis le journal pédagogique des échanges de BedView.
+
+Le journal conserve en mémoire les **100 derniers appels** de la session.
+
+Pour chaque appel, enregistrer :
+
+- date et heure ;
+- méthode HTTP ;
+- URL appelée ;
+- statut HTTP ;
+- durée ;
+- nombre de ressources reçues ;
+- erreur éventuelle.
+
+Définis :
+
+1. quand une entrée est créée ;
+2. comment les appels réussis sont enregistrés ;
+3. comment les appels échoués sont enregistrés ;
+4. comment le journal est présenté dans l’onglet Ressources FHIR ;
+5. comment il permet de démontrer que BedView communique réellement avec HAPI.
+
+Précise clairement qu’il ne s’agit pas d’un système d’audit hospitalier.
+
+### Résultat attendu selon le cahier des charges
+
+- Les 100 derniers appels sont conservés.
+- Chaque appel a date/heure, méthode, URL, statut, durée, nombre de ressources et erreur.
+- Les JSON reçus peuvent être inspectés à côté.
+- Le journal sert à la traçabilité pédagogique uniquement.
+
+---
+
+## Prompt J6 — Recette fonctionnelle et critères d’acceptation
+
+### Prompt
+
+Construis la recette finale de BedView selon les critères T01 à T14.
+
+Pour chaque test, produis :
+
+- identifiant ;
+- précondition ;
+- action ;
+- résultat attendu ;
+- mode de test : vrai serveur HAPI ou réponse simulée autorisée.
+
+Tests :
+
+- T01 — Connexion réelle
+- T02 — Comptage
+- T03 — État absent
+- T04 — Filtrage
+- T05 — Inspection de la source
+- T06 — Mapping
+- T07 — CSV avec caractères particuliers
+- T08 — Système différent
+- T09 — Version non prise en charge
+- T10 — Pagination et doublons
+- T11 — Erreur réseau
+- T12 — Actualisation
+- T13 — Ressource hors périmètre
+- T14 — Protection CSV
+
+Règles :
+
+- T01 à T06 et T12 doivent être démontrés avec HAPI ;
+- les cas limites peuvent être simulés en tests automatisés ;
+- les simulations ne remplacent pas la connexion réelle de l’application.
+
+### Résultat attendu selon le cahier des charges
+
+| Test | Résultat attendu |
+|---|---|
+| T01 | Appels HAPI réels visibles |
+| T02 | 10 lits avec la répartition prévue |
+| T03 | Lit sans état → `INCONNU` |
+| T04 | Filtre OCCUPE → 3 lignes et CSV 3 lignes |
+| T05 | JSON affiché = ressource reçue |
+| T06 | Système, code, cible, version et résultat visibles |
+| T07 | Virgules/guillemets ne cassent pas le CSV |
+| T08 | `O` sous mauvais système ≠ `OCCUPE` |
+| T09 | Mauvaise version → `INCONNU` |
+| T10 | Pagination complète + déduplication |
+| T11 | Erreur → message + export bloqué |
+| T12 | Après U→O : 10 total, 4 occupés, 1 inoccupé |
+| T13 | Chambre exclue et signalée |
+| T14 | Cellule `=` neutralisée |
+
+---
+
+## Couverture du cahier des charges
+
+| Sections du cahier des charges | Couverture |
+|---|---|
+| 5 et 14 | Prompt J1 |
+| 15 | Prompts J2 et J3 |
+| 16 | Prompts J4 et J5 |
+| 18 | Prompt J6 |
+| 19 | Pris en compte par la priorisation fonctionnelle des prompts J1 à J6 |
